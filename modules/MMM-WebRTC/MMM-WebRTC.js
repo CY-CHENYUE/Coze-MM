@@ -100,34 +100,6 @@ Module.register("MMM-WebRTC", {
         try {
             Log.info("MMM-WebRTC: Initializing client...");
             
-            // 在创建客户端之前尝试初始化音频
-            if (!this.audioInitialized) {
-                try {
-                    // 创建一个隐藏的按钮来触发音频初始化
-                    const audioInitButton = document.createElement('button');
-                    audioInitButton.style.position = 'absolute';
-                    audioInitButton.style.left = '-9999px';
-                    document.body.appendChild(audioInitButton);
-
-                    // 模拟用户交互
-                    audioInitButton.addEventListener('click', () => {
-                        const AudioContext = window.AudioContext || window.webkitAudioContext;
-                        const audioContext = new AudioContext();
-                        audioContext.resume().then(() => {
-                            Log.info("MMM-WebRTC: AudioContext resumed successfully");
-                            this.audioInitialized = true;
-                            // 移除按钮
-                            document.body.removeChild(audioInitButton);
-                        });
-                    });
-
-                    // 触发点击
-                    audioInitButton.click();
-                } catch (error) {
-                    Log.error("MMM-WebRTC: Failed to initialize audio:", error);
-                }
-            }
-            
             // 创建客户端实例
             this.client = new this.RealtimeClient({
                 accessToken: () => this.config.coze.accessToken,
@@ -358,7 +330,17 @@ Module.register("MMM-WebRTC", {
         try {
             Log.info("MMM-WebRTC: Starting audio...");
             
-            // 1. 先获取音频流并保持连接
+            // 1. 确保 AudioContext 已初始化
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                // 等待用户交互
+                if (this.audioContext.state === 'suspended') {
+                    await this.audioContext.resume();
+                }
+                Log.info("MMM-WebRTC: AudioContext initialized successfully");
+            }
+            
+            // 2. 获取音频流
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: false,
@@ -370,13 +352,13 @@ Module.register("MMM-WebRTC", {
             // 保存流的引用
             this.audioStream = stream;
             
-            // 2. 设置监听状态
+            // 3. 设置监听状态
             this.isListening = true;
 
-            // 3. 启用音频
+            // 4. 启用音频
             await this.client.setAudioEnable(true);
             
-            // 4. 启用音频属性报告
+            // 5. 启用音频属性报告
             await this.client.enableAudioPropertiesReport({
                 interval: 100,
                 enableVad: true,
