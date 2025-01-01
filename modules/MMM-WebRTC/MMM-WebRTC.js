@@ -34,12 +34,6 @@ Module.register("MMM-WebRTC", {
         if (typeof global === 'undefined') {
             window.global = window;
         }
-        
-        // 设置自动播放策略
-        if (typeof document !== 'undefined') {
-            document.documentElement.setAttribute('autoplay-policy', 'no-user-gesture-required');
-        }
-        
         return [
             "/modules/MMM-WebRTC/public/coze-realtime-api.js"
         ];
@@ -64,84 +58,9 @@ Module.register("MMM-WebRTC", {
         this.isSpeaking = false;
         this.silenceTimer = null;
         this.audioInitialized = false;
-        this.audioContext = null;
 
-        // 创建一个隐藏的 iframe 来绕过自动播放限制
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-        
-        // 尝试在 iframe 中创建 AudioContext
-        try {
-            const iframeWindow = iframe.contentWindow || iframe.contentDocument.defaultView;
-            this.audioContext = new (iframeWindow.AudioContext || iframeWindow.webkitAudioContext)();
-        } catch (error) {
-            Log.warn("MMM-WebRTC: Failed to create AudioContext in iframe, falling back to main window");
-        }
-
-        // 如果 iframe 方法失败，尝试在主窗口创建
-        if (!this.audioContext) {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.audioContext = new AudioContext();
-        }
-
-        // 初始化音频
-        this.initAudio().then(() => {
-            this.checkSDK();
-        }).catch(error => {
-            Log.error("MMM-WebRTC: Failed to initialize audio:", error);
-            this.checkSDK();
-        });
-    },
-
-    initAudio: async function() {
-        try {
-            if (!this.audioInitialized) {
-                // 尝试解锁音频上下文
-                await this.unlockAudioContext(this.audioContext);
-
-                // 创建一个静音的 oscillator
-                const oscillator = this.audioContext.createOscillator();
-                const gainNode = this.audioContext.createGain();
-                gainNode.gain.value = 0; // 完全静音
-                oscillator.connect(gainNode);
-                gainNode.connect(this.audioContext.destination);
-                oscillator.start();
-                oscillator.stop(this.audioContext.currentTime + 0.001);
-
-                Log.info("MMM-WebRTC: AudioContext initialized successfully");
-                this.audioInitialized = true;
-            }
-        } catch (error) {
-            Log.error("MMM-WebRTC: Failed to initialize audio:", error);
-            throw error;
-        }
-    },
-
-    unlockAudioContext: async function(audioContext) {
-        if (audioContext.state === 'suspended') {
-            const buffer = audioContext.createBuffer(1, 1, 22050);
-            const source = audioContext.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioContext.destination);
-            source.start(0);
-            
-            return new Promise((resolve) => {
-                const resume = async () => {
-                    if (audioContext.state === 'suspended') {
-                        await audioContext.resume();
-                    }
-                    
-                    if (audioContext.state === 'running') {
-                        resolve();
-                    } else {
-                        requestAnimationFrame(resume);
-                    }
-                };
-                
-                resume();
-            });
-        }
+        // 直接检查 SDK，不预先初始化音频
+        this.checkSDK();
     },
 
     checkSDK: function() {
@@ -177,49 +96,37 @@ Module.register("MMM-WebRTC", {
         setTimeout(checkSDKAvailability, 1000);
     },
 
-    waitForUserInteraction: function() {
-        return new Promise((resolve) => {
-            const initAudio = async () => {
-                try {
-                    if (!this.audioInitialized && !this.audioContext) {
-                        const AudioContext = window.AudioContext || window.webkitAudioContext;
-                        this.audioContext = new AudioContext();
-                        await this.audioContext.resume();
-                        Log.info("MMM-WebRTC: AudioContext initialized successfully");
-                        this.audioInitialized = true;
-                    }
-                    resolve();
-                } catch (error) {
-                    Log.error("MMM-WebRTC: Failed to initialize audio:", error);
-                    resolve(); // 即使失败也继续
-                }
-            };
-
-            // 监听可能的用户交互事件
-            const interactionEvents = ['click', 'touchstart', 'keydown'];
-            const handleInteraction = async () => {
-                // 移除所有事件监听器
-                interactionEvents.forEach(event => {
-                    document.removeEventListener(event, handleInteraction);
-                });
-                await initAudio();
-            };
-
-            // 添加事件监听器
-            interactionEvents.forEach(event => {
-                document.addEventListener(event, handleInteraction, { once: true });
-            });
-
-            // 如果配置了自动启动，也尝试初始化
-            if (this.config.autoStart) {
-                initAudio();
-            }
-        });
-    },
-
     initClient: function() {
         try {
             Log.info("MMM-WebRTC: Initializing client...");
+            
+            // 在创建客户端之前尝试初始化音频
+            if (!this.audioInitialized) {
+                try {
+                    // 创建一个隐藏的按钮来触发音频初始化
+                    const audioInitButton = document.createElement('button');
+                    audioInitButton.style.position = 'absolute';
+                    audioInitButton.style.left = '-9999px';
+                    document.body.appendChild(audioInitButton);
+
+                    // 模拟用户交互
+                    audioInitButton.addEventListener('click', () => {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        const audioContext = new AudioContext();
+                        audioContext.resume().then(() => {
+                            Log.info("MMM-WebRTC: AudioContext resumed successfully");
+                            this.audioInitialized = true;
+                            // 移除按钮
+                            document.body.removeChild(audioInitButton);
+                        });
+                    });
+
+                    // 触发点击
+                    audioInitButton.click();
+                } catch (error) {
+                    Log.error("MMM-WebRTC: Failed to initialize audio:", error);
+                }
+            }
             
             // 创建客户端实例
             this.client = new this.RealtimeClient({
@@ -229,27 +136,16 @@ Module.register("MMM-WebRTC", {
                 debug: this.config.debug,
                 baseURL: this.config.coze.baseURL,
                 allowPersonalAccessTokenInBrowser: true,
-                audioMutedDefault: false,  // 确保音频默认不是静音的
+                audioMutedDefault: this.config.audioMutedDefault,
                 suppressStationaryNoise: this.config.suppressStationaryNoise,
                 suppressNonStationaryNoise: this.config.suppressNonStationaryNoise,
                 connectorId: this.config.connectorId,
                 audioConfig: {
                     captureDeviceId: this.selectedAudioInput,
                     playbackDeviceId: this.selectedAudioOutput,
-                    agc: false,  // 禁用自动增益控制
-                    aec: false,  // 禁用回声消除
-                    ans: false,  // 禁用噪声抑制
-                    sampleRate: 44100,
-                    channelCount: 1,
-                    autoGainControl: false,
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    latencyHint: 'interactive',
-                    // 添加新的配置
-                    autoPlayAfterMuted: true,
-                    skipAudioContextCheck: true,  // 尝试跳过 AudioContext 检查
-                    forceAutoplay: true,  // 强制自动播放
-                    bypassAutoplayPolicy: true  // 尝试绕过自动播放策略
+                    agc: true,
+                    aec: true,
+                    ans: true
                 }
             });
 
@@ -270,7 +166,7 @@ Module.register("MMM-WebRTC", {
                 }
             });
 
-            // 直接连接服务器
+            // 连接服务器
             this.connect();
         } catch (error) {
             Log.error("MMM-WebRTC: Failed to initialize client:", error);
@@ -456,31 +352,31 @@ Module.register("MMM-WebRTC", {
         }
     },
 
-    startListening: async function() {
+    async startListening() {
         if (!this.client || this.isListening) return;
 
         try {
             Log.info("MMM-WebRTC: Starting audio...");
             
-            // 使用更宽松的音频配置
+            // 1. 先获取音频流并保持连接
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: false,
                     noiseSuppression: false,
-                    autoGainControl: false,
-                    channelCount: 1,
-                    sampleRate: 44100,
-                    latency: 0,
-                    deviceId: this.selectedAudioInput
+                    autoGainControl: false
                 } 
             });
             
+            // 保存流的引用
             this.audioStream = stream;
+            
+            // 2. 设置监听状态
             this.isListening = true;
 
-            // 尝试直接启用音频，不等待用户交互
+            // 3. 启用音频
             await this.client.setAudioEnable(true);
             
+            // 4. 启用音频属性报告
             await this.client.enableAudioPropertiesReport({
                 interval: 100,
                 enableVad: true,
@@ -491,12 +387,14 @@ Module.register("MMM-WebRTC", {
             if (button) button.textContent = "正在录音...";
             Log.info("MMM-WebRTC: Audio started");
 
+            // 更新指示器
             const indicator = document.querySelector(".audio-indicator");
             if (indicator) indicator.classList.add("active");
         } catch (error) {
             Log.error("MMM-WebRTC: Failed to start listening:", error);
             this.isListening = false;
             
+            // 清理资源
             if (this.audioStream) {
                 this.audioStream.getTracks().forEach(track => track.stop());
                 this.audioStream = null;
