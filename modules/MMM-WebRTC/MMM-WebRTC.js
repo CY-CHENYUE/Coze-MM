@@ -229,22 +229,27 @@ Module.register("MMM-WebRTC", {
                 debug: this.config.debug,
                 baseURL: this.config.coze.baseURL,
                 allowPersonalAccessTokenInBrowser: true,
-                audioMutedDefault: this.config.audioMutedDefault,
+                audioMutedDefault: false,  // 确保音频默认不是静音的
                 suppressStationaryNoise: this.config.suppressStationaryNoise,
                 suppressNonStationaryNoise: this.config.suppressNonStationaryNoise,
                 connectorId: this.config.connectorId,
                 audioConfig: {
                     captureDeviceId: this.selectedAudioInput,
                     playbackDeviceId: this.selectedAudioOutput,
-                    agc: true,
-                    aec: true,
-                    ans: true,
-                    // 添加更多音频配置以提高兼容性
+                    agc: false,  // 禁用自动增益控制
+                    aec: false,  // 禁用回声消除
+                    ans: false,  // 禁用噪声抑制
                     sampleRate: 44100,
                     channelCount: 1,
+                    autoGainControl: false,
                     echoCancellation: false,
                     noiseSuppression: false,
-                    autoGainControl: false
+                    latencyHint: 'interactive',
+                    // 添加新的配置
+                    autoPlayAfterMuted: true,
+                    skipAudioContextCheck: true,  // 尝试跳过 AudioContext 检查
+                    forceAutoplay: true,  // 强制自动播放
+                    bypassAutoplayPolicy: true  // 尝试绕过自动播放策略
                 }
             });
 
@@ -451,31 +456,31 @@ Module.register("MMM-WebRTC", {
         }
     },
 
-    async startListening() {
+    startListening: async function() {
         if (!this.client || this.isListening) return;
 
         try {
             Log.info("MMM-WebRTC: Starting audio...");
             
-            // 1. 先获取音频流并保持连接
+            // 使用更宽松的音频配置
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: false,
                     noiseSuppression: false,
-                    autoGainControl: false
+                    autoGainControl: false,
+                    channelCount: 1,
+                    sampleRate: 44100,
+                    latency: 0,
+                    deviceId: this.selectedAudioInput
                 } 
             });
             
-            // 保存流的引用
             this.audioStream = stream;
-            
-            // 2. 设置监听状态
             this.isListening = true;
 
-            // 3. 启用音频
+            // 尝试直接启用音频，不等待用户交互
             await this.client.setAudioEnable(true);
             
-            // 4. 启用音频属性报告
             await this.client.enableAudioPropertiesReport({
                 interval: 100,
                 enableVad: true,
@@ -486,14 +491,12 @@ Module.register("MMM-WebRTC", {
             if (button) button.textContent = "正在录音...";
             Log.info("MMM-WebRTC: Audio started");
 
-            // 更新指示器
             const indicator = document.querySelector(".audio-indicator");
             if (indicator) indicator.classList.add("active");
         } catch (error) {
             Log.error("MMM-WebRTC: Failed to start listening:", error);
             this.isListening = false;
             
-            // 清理资源
             if (this.audioStream) {
                 this.audioStream.getTracks().forEach(track => track.stop());
                 this.audioStream = null;
