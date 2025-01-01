@@ -11,7 +11,7 @@ cd ~/MagicMirror/modules
 
 2. 克隆此仓库：
 ```bash
-git clone https://github.com/yourusername/MMM-WebRTC.git
+git clone https://github.com/CY-CHENYUE/Coze-MM/tree/main/modules/MMM-WebRTC
 ```
 
 ## 配置
