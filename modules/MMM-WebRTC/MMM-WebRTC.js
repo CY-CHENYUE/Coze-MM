@@ -58,9 +58,54 @@ Module.register("MMM-WebRTC", {
         this.isSpeaking = false;
         this.silenceTimer = null;
         this.audioInitialized = false;
+        this.audioContext = null;
 
-        // 直接检查 SDK，不预先初始化音频
-        this.checkSDK();
+        // 直接初始化音频
+        this.initAudio().then(() => {
+            // 检查SDK
+            this.checkSDK();
+        }).catch(error => {
+            Log.error("MMM-WebRTC: Failed to initialize audio:", error);
+            // 即使音频初始化失败也继续检查SDK
+            this.checkSDK();
+        });
+    },
+
+    initAudio: async function() {
+        try {
+            if (!this.audioInitialized && !this.audioContext) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.audioContext = new AudioContext({
+                    // 设置较低的采样率，可能有助于在树莓派上更好地工作
+                    sampleRate: 44100,
+                    // 设置较小的缓冲区大小
+                    latencyHint: 'interactive',
+                    // 在某些浏览器中这可能有助于绕过自动播放策略
+                    sinkId: 'default'
+                });
+
+                // 创建一个静音的 oscillator 并连接到输出
+                // 这个技巧可以帮助初始化音频系统
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                gainNode.gain.value = 0; // 完全静音
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                oscillator.start();
+                oscillator.stop(this.audioContext.currentTime + 0.001);
+
+                // 尝试恢复 AudioContext
+                if (this.audioContext.state === 'suspended') {
+                    await this.audioContext.resume();
+                }
+
+                Log.info("MMM-WebRTC: AudioContext initialized successfully");
+                this.audioInitialized = true;
+            }
+        } catch (error) {
+            Log.error("MMM-WebRTC: Failed to initialize audio:", error);
+            throw error;
+        }
     },
 
     checkSDK: function() {
@@ -96,37 +141,49 @@ Module.register("MMM-WebRTC", {
         setTimeout(checkSDKAvailability, 1000);
     },
 
+    waitForUserInteraction: function() {
+        return new Promise((resolve) => {
+            const initAudio = async () => {
+                try {
+                    if (!this.audioInitialized && !this.audioContext) {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        this.audioContext = new AudioContext();
+                        await this.audioContext.resume();
+                        Log.info("MMM-WebRTC: AudioContext initialized successfully");
+                        this.audioInitialized = true;
+                    }
+                    resolve();
+                } catch (error) {
+                    Log.error("MMM-WebRTC: Failed to initialize audio:", error);
+                    resolve(); // 即使失败也继续
+                }
+            };
+
+            // 监听可能的用户交互事件
+            const interactionEvents = ['click', 'touchstart', 'keydown'];
+            const handleInteraction = async () => {
+                // 移除所有事件监听器
+                interactionEvents.forEach(event => {
+                    document.removeEventListener(event, handleInteraction);
+                });
+                await initAudio();
+            };
+
+            // 添加事件监听器
+            interactionEvents.forEach(event => {
+                document.addEventListener(event, handleInteraction, { once: true });
+            });
+
+            // 如果配置了自动启动，也尝试初始化
+            if (this.config.autoStart) {
+                initAudio();
+            }
+        });
+    },
+
     initClient: function() {
         try {
             Log.info("MMM-WebRTC: Initializing client...");
-            
-            // 在创建客户端之前尝试初始化音频
-            if (!this.audioInitialized) {
-                try {
-                    // 创建一个隐藏的按钮来触发音频初始化
-                    const audioInitButton = document.createElement('button');
-                    audioInitButton.style.position = 'absolute';
-                    audioInitButton.style.left = '-9999px';
-                    document.body.appendChild(audioInitButton);
-
-                    // 模拟用户交互
-                    audioInitButton.addEventListener('click', () => {
-                        const AudioContext = window.AudioContext || window.webkitAudioContext;
-                        const audioContext = new AudioContext();
-                        audioContext.resume().then(() => {
-                            Log.info("MMM-WebRTC: AudioContext resumed successfully");
-                            this.audioInitialized = true;
-                            // 移除按钮
-                            document.body.removeChild(audioInitButton);
-                        });
-                    });
-
-                    // 触发点击
-                    audioInitButton.click();
-                } catch (error) {
-                    Log.error("MMM-WebRTC: Failed to initialize audio:", error);
-                }
-            }
             
             // 创建客户端实例
             this.client = new this.RealtimeClient({
@@ -145,7 +202,13 @@ Module.register("MMM-WebRTC", {
                     playbackDeviceId: this.selectedAudioOutput,
                     agc: true,
                     aec: true,
-                    ans: true
+                    ans: true,
+                    // 添加更多音频配置以提高兼容性
+                    sampleRate: 44100,
+                    channelCount: 1,
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
                 }
             });
 
@@ -166,7 +229,7 @@ Module.register("MMM-WebRTC", {
                 }
             });
 
-            // 连接服务器
+            // 直接连接服务器
             this.connect();
         } catch (error) {
             Log.error("MMM-WebRTC: Failed to initialize client:", error);
