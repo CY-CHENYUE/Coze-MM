@@ -1,0 +1,82 @@
+.MMM-WebRTC {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+    color: #fff;
+    position: relative;
+    width: 100%;
+}
+
+/* 状态显示区域 */
+.status-container {
+    position: fixed;
+    top: 10px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1000;
+}
+
+#webrtc-status {
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.audio-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #f44336;
+    transition: background-color 0.3s ease;
+}
+
+.audio-indicator.active {
+    background-color: #4caf50;
+}
+
+/* 语音波形动画 */
+.voice-animation {
+    position: fixed;
+    top: 65%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 4px;
+    height: 100px;
+    width: 200px;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.voice-animation.active {
+    display: flex;
+}
+
+.voice-bar {
+    width: 4px;
+    min-height: 3px;
+    background: #4caf50;
+    border-radius: 2px;
+    transition: transform 0.1s ease;
+}
+
+.voice-bar:nth-child(1) { background: #4caf50; }
+.voice-bar:nth-child(2) { background: #66bb6a; }
+.voice-bar:nth-child(3) { background: #81c784; }
+.voice-bar:nth-child(4) { background: #66bb6a; }
+.voice-bar:nth-child(5) { background: #4caf50; }
+
+/* 隐藏消息显示 */
+#messages {
+    display: none;
+}
+
+.voice-button {
+    display: none;
+} 

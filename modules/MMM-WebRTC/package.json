@@ -1,0 +1,12 @@
+{
+  "name": "MMM-WebRTC",
+  "version": "1.0.0",
+  "description": "WebRTC module for MagicMirror² with Coze integration",
+  "main": "MMM-WebRTC.js",
+  "dependencies": {
+    "@coze/api": "^1.0.15",
+    "@coze/realtime-api": "^1.0.3"
+  },
+  "author": "",
+  "license": "MIT"
+}
