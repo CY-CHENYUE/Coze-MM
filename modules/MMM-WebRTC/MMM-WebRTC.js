@@ -34,6 +34,12 @@ Module.register("MMM-WebRTC", {
         if (typeof global === 'undefined') {
             window.global = window;
         }
+        
+        // 设置自动播放策略
+        if (typeof document !== 'undefined') {
+            document.documentElement.setAttribute('autoplay-policy', 'no-user-gesture-required');
+        }
+        
         return [
             "/modules/MMM-WebRTC/public/coze-realtime-api.js"
         ];
@@ -60,32 +66,41 @@ Module.register("MMM-WebRTC", {
         this.audioInitialized = false;
         this.audioContext = null;
 
-        // 直接初始化音频
+        // 创建一个隐藏的 iframe 来绕过自动播放限制
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+        
+        // 尝试在 iframe 中创建 AudioContext
+        try {
+            const iframeWindow = iframe.contentWindow || iframe.contentDocument.defaultView;
+            this.audioContext = new (iframeWindow.AudioContext || iframeWindow.webkitAudioContext)();
+        } catch (error) {
+            Log.warn("MMM-WebRTC: Failed to create AudioContext in iframe, falling back to main window");
+        }
+
+        // 如果 iframe 方法失败，尝试在主窗口创建
+        if (!this.audioContext) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.audioContext = new AudioContext();
+        }
+
+        // 初始化音频
         this.initAudio().then(() => {
-            // 检查SDK
             this.checkSDK();
         }).catch(error => {
             Log.error("MMM-WebRTC: Failed to initialize audio:", error);
-            // 即使音频初始化失败也继续检查SDK
             this.checkSDK();
         });
     },
 
     initAudio: async function() {
         try {
-            if (!this.audioInitialized && !this.audioContext) {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                this.audioContext = new AudioContext({
-                    // 设置较低的采样率，可能有助于在树莓派上更好地工作
-                    sampleRate: 44100,
-                    // 设置较小的缓冲区大小
-                    latencyHint: 'interactive',
-                    // 在某些浏览器中这可能有助于绕过自动播放策略
-                    sinkId: 'default'
-                });
+            if (!this.audioInitialized) {
+                // 尝试解锁音频上下文
+                await this.unlockAudioContext(this.audioContext);
 
-                // 创建一个静音的 oscillator 并连接到输出
-                // 这个技巧可以帮助初始化音频系统
+                // 创建一个静音的 oscillator
                 const oscillator = this.audioContext.createOscillator();
                 const gainNode = this.audioContext.createGain();
                 gainNode.gain.value = 0; // 完全静音
@@ -94,17 +109,38 @@ Module.register("MMM-WebRTC", {
                 oscillator.start();
                 oscillator.stop(this.audioContext.currentTime + 0.001);
 
-                // 尝试恢复 AudioContext
-                if (this.audioContext.state === 'suspended') {
-                    await this.audioContext.resume();
-                }
-
                 Log.info("MMM-WebRTC: AudioContext initialized successfully");
                 this.audioInitialized = true;
             }
         } catch (error) {
             Log.error("MMM-WebRTC: Failed to initialize audio:", error);
             throw error;
+        }
+    },
+
+    unlockAudioContext: async function(audioContext) {
+        if (audioContext.state === 'suspended') {
+            const buffer = audioContext.createBuffer(1, 1, 22050);
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+            
+            return new Promise((resolve) => {
+                const resume = async () => {
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
+                    
+                    if (audioContext.state === 'running') {
+                        resolve();
+                    } else {
+                        requestAnimationFrame(resume);
+                    }
+                };
+                
+                resume();
+            });
         }
     },
 
