@@ -151,18 +151,12 @@ Module.register("MMM-WebRTC", {
 
         // 检测是否有语音
         const isVoiceDetected = level > this.config.vadOptions.voiceThreshold;
-        const voiceAnimation = document.querySelector(".voice-animation");
         
         if (isVoiceDetected && !this.isSpeaking) {
             // 检测到语音开始
             Log.info("MMM-WebRTC: Voice detected, starting audio...");
             this.isSpeaking = true;
             this.startListening();
-            if (voiceAnimation) {
-                voiceAnimation.classList.add("active");
-                // 立即更新动画效果
-                this.updateVoiceAnimation(level);
-            }
         } else if (!isVoiceDetected && this.isSpeaking) {
             // 检测到可能的静音
             if (!this.silenceTimer) {
@@ -171,9 +165,6 @@ Module.register("MMM-WebRTC", {
                     Log.info("MMM-WebRTC: Silence detected, stopping audio...");
                     this.isSpeaking = false;
                     this.stopListening();
-                    if (voiceAnimation) {
-                        voiceAnimation.classList.remove("active");
-                    }
                     this.silenceTimer = null;
                 }, this.config.vadOptions.silenceDuration);
             }
@@ -182,28 +173,6 @@ Module.register("MMM-WebRTC", {
             clearTimeout(this.silenceTimer);
             this.silenceTimer = null;
         }
-
-        // 更新动画效果
-        if (this.isSpeaking) {
-            this.updateVoiceAnimation(level);
-        }
-    },
-
-    updateVoiceAnimation: function(level) {
-        const voiceAnimation = document.querySelector(".voice-animation");
-        if (!voiceAnimation) return;
-
-        const bars = voiceAnimation.querySelectorAll(".voice-bar");
-        if (!bars.length) return;
-
-        // 将电平值归一化到0.3-1范围
-        const normalizedLevel = Math.max(0.3, Math.min(1, (level + 100) / 50));
-        
-        // 为每个bar设置不同的缩放值，创造波浪效果
-        bars.forEach((bar, index) => {
-            const scale = normalizedLevel * (0.7 + Math.sin(Date.now() / 200 + index) * 0.3);
-            bar.style.transform = `scaleY(${scale})`;
-        });
     },
 
     connect: async function() {
@@ -444,16 +413,6 @@ Module.register("MMM-WebRTC", {
         statusContainer.appendChild(indicator);
         statusContainer.appendChild(status);
         wrapper.appendChild(statusContainer);
-
-        // 创建语音波形动画
-        const voiceAnimation = document.createElement("div");
-        voiceAnimation.className = "voice-animation";
-        for (let i = 0; i < 5; i++) {
-            const bar = document.createElement("div");
-            bar.className = "voice-bar";
-            voiceAnimation.appendChild(bar);
-        }
-        wrapper.appendChild(voiceAnimation);
 
         const messages = document.createElement("div");
         messages.id = "messages";

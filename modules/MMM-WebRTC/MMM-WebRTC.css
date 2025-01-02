@@ -36,42 +36,6 @@
     background-color: #4caf50;
 }
 
-/* 语音波形动画 */
-.voice-animation {
-    position: fixed;
-    top: 65%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    display: none;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 4px;
-    height: 100px;
-    width: 200px;
-    z-index: 1000;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 10px;
-    padding: 20px;
-}
-
-.voice-animation.active {
-    display: flex;
-}
-
-.voice-bar {
-    width: 4px;
-    min-height: 3px;
-    background: #4caf50;
-    border-radius: 2px;
-    transition: transform 0.1s ease;
-}
-
-.voice-bar:nth-child(1) { background: #4caf50; }
-.voice-bar:nth-child(2) { background: #66bb6a; }
-.voice-bar:nth-child(3) { background: #81c784; }
-.voice-bar:nth-child(4) { background: #66bb6a; }
-.voice-bar:nth-child(5) { background: #4caf50; }
-
 /* 隐藏消息显示 */
 #messages {
     display: none;
