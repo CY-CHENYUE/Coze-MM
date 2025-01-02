@@ -104,7 +104,7 @@ let config = {
 				autoStart: true,
 				coze: {
 					botId: "7453329674383900709",
-					voiceId: "7426725529589579803",
+					voiceId: "7426720361733062665",
 					baseURL: "https://api.coze.cn",
 					accessToken: "pat_Pc4w4iFQpmSzDwiQcR76I9j4okAfHmlpg65gFkUcA7pCZwVsoZ6VPMwxm1PFMJ0w",
 					allowPersonalAccessTokenInBrowser: true,
